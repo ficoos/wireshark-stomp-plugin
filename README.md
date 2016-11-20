@@ -1,5 +1,5 @@
-Wireshar STOMP dissector plugin
-===============================
+Wireshark STOMP dissector plugin
+================================
 
 ## Installation
 Copy `stomp.lua` to `~/.wireshark/plugins/`
