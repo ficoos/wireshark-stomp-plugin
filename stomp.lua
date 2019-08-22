@@ -1,3 +1,5 @@
+-- Modified on 2015-7-4 by Hadriel to handle STOMP over HTTP/Websocket
+-- Modified on 2019-8-21 by Ethan Reesor to handle STOMP over SSL/TLS
 --
 -- Copyright 2009-2012 Red Hat, Inc.
 --
@@ -33,10 +35,33 @@ p_stomp.fields = {
     f_header_value,
 }
 
+local settings = {
+    TCP_PORT = 54321,
+    SSL_PORT = 61614,
+    WEBSOCKET_PORT = 9000
+}
+
 p_stomp.prefs["tcp_port"] = Pref.uint(
-    "TCP Port",
-    54321,
-    "TCP Port for STOMP communication"
+    "Standards-based TCP Port",
+    settings.TCP_PORT,
+    "TCP Port for STOMP standards-compliant communication (0 to disable)"
+)
+
+p_stomp.prefs["tls_port"] = Pref.uint(
+    "STOMP-over-SSL TCP Port",
+    settings.TCP_PORT,
+    "TCP Port for STOMP over SSL (0 to disable)"
+)
+
+p_stomp.prefs["websocket_port"] = Pref.uint(
+    "STOMP in Websocket for HTTP server TCP port",
+    settings.WEBSOCKET_PORT,
+    "The TCP server port number for STOMP in Websocket payload (0 to disable)"
+)
+
+p_stomp.prefs["warning_text"] = Pref.statictext(
+    "Warning: The Standards-based TCP port number must not be the "..
+    "same as the Websocket TCP port number."
 )
 
 local Headers = {
@@ -171,7 +196,75 @@ function p_stomp.dissector(buf, pinfo, root)
     pinfo.desegment_offset = offset
 end
 
-function p_stomp.init()
-    local tcp_dissector_table = DissectorTable.get("tcp.port")
-    tcp_dissector_table:add(p_stomp.prefs["tcp_port"], p_stomp)
+local errmsg = "Error: The STOMP preferences are invalid! The port numbers for plain STOMP, STOMP-over-SSL, and STOMP-over-Websocket must all be different!\n\nPlease correct this before continuing."
+
+function p_stomp.prefs_changed()
+    -- raw TCP and Websocket cannot use same port number
+    local tcp_port = p_stomp.prefs.tcp_port
+    local ssl_port = p_stomp.prefs.ssl_port
+    local websocket_port = p_stomp.prefs.websocket_port
+
+    if ((tcp_port ~= 0) and ((tcp_port == ssl_port) or (tcp_port == websocket_port))) or ((ssl_port ~= 0) and (ssl_port == websocket_port)) then
+        if gui_enabled() then
+            local tw = TextWindow.new("STOMP Preference Error")
+            tw:set(errmsg)
+        else
+            print(errmsg)
+        end
+        return
+    end
+
+    if settings.TCP_PORT ~= tcp_port then
+        -- the tcp port number preference changed
+        local tcp_dissector_table = DissectorTable.get("tcp.port")
+        if settings.TCP_PORT ~= 0 then
+            -- remove our proto from the number it was previously dissecting
+            tcp_dissector_table:remove(settings.TCP_PORT, p_stomp)
+        end
+        settings.TCP_PORT = tcp_port
+        if settings.TCP_PORT ~= 0 then
+            -- add our proto for the new port number
+            tcp_dissector_table:add(settings.TCP_PORT, p_stomp)
+        end
+    end
+
+    if settings.SSL_PORT ~= ssl_port then
+        -- the tcp port number preference changed
+        local tcp_dissector_table = DissectorTable.get("ssl.port")
+        if settings.SSL_PORT ~= 0 then
+            -- remove our proto from the number it was previously dissecting
+            tcp_dissector_table:remove(settings.SSL_PORT, p_stomp)
+        end
+        settings.SSL_PORT = ssl_port
+        if settings.SSL_PORT ~= 0 then
+            -- add our proto for the new port number
+            tcp_dissector_table:add(settings.SSL_PORT, p_stomp)
+        end
+    end
+
+    if settings.WEBSOCKET_PORT ~= websocket_port then
+        -- the tcp port number preference changed
+        local ws_dissector_table = DissectorTable.get("ws.port")
+        if settings.WEBSOCKET_PORT ~= 0 then
+            -- remove our proto from the number it was previously dissecting
+            ws_dissector_table:remove(settings.WEBSOCKET_PORT, p_stomp)
+        end
+        settings.WEBSOCKET_PORT = websocket_port
+        if settings.WEBSOCKET_PORT ~= 0 then
+            -- add our proto for the new port number
+            ws_dissector_table:add(settings.WEBSOCKET_PORT, p_stomp)
+        end
+    end
+end
+
+if settings.TCP_PORT ~= 0 then
+    DissectorTable.get("tcp.port"):add(settings.TCP_PORT, p_stomp)
+end
+
+if settings.SSL_PORT ~= 0 then
+    DissectorTable.get("ssl.port"):add(settings.SSL_PORT, p_stomp)
+end
+
+if settings.WEBSOCKET_PORT ~= 0 then
+    DissectorTable.get("ws.port"):add(settings.WEBSOCKET_PORT, p_stomp)
 end
