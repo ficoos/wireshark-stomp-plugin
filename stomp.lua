@@ -47,7 +47,7 @@ p_stomp.prefs["tcp_port"] = Pref.uint(
     "TCP Port for STOMP standards-compliant communication (0 to disable)"
 )
 
-p_stomp.prefs["tls_port"] = Pref.uint(
+p_stomp.prefs["ssl_port"] = Pref.uint(
     "STOMP-over-SSL TCP Port",
     settings.TCP_PORT,
     "TCP Port for STOMP over SSL (0 to disable)"
